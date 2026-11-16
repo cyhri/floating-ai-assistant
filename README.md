@@ -23,7 +23,7 @@ Floating AI Assistant overlays an unobtrusive, floating assistant directly insid
 - **Keyboard Shortcut**: Press `Alt+Shift+Q` anywhere to toggle the floating window instantly.
 - **Intelligent Selection Tracking**: Captures and remembers your last highlighted text using `selectionchange` listeners and `preventDefault` mousedown guards, so clicks inside the window never lose your highlight.
 - **Full Page Reading**: "Read page" grabs the page body text (trimmed up to 12,000 characters) for context-heavy questions.
-- **Configurable Settings Panel**: Gear icon allows entering and saving your Gemini API key and model name (`gemini-3.8-flash` by default) in `chrome.storage.local`.
+- **Configurable Settings Panel**: Gear icon allows entering and saving your Gemini API key and model name (`gemini-2.0-flash` by default with automatic failover) in `chrome.storage.local`.
 - **Security-First**: The API key is stored locally in extension storage and never hardcoded, written to disk, or logged to the console.
 
 ---
@@ -59,7 +59,7 @@ Floating AI Assistant overlays an unobtrusive, floating assistant directly insid
 2. **First-Time Setup**:
    - Click the **gear icon** (⚙) in the window title bar.
    - Paste your Gemini API key into the password field.
-   - *(Optional)* Set a custom model name (defaults to `gemini-3.8-flash`).
+   - *(Optional)* Set a custom model name (defaults to `gemini-2.0-flash` with automatic high-demand failover).
    - Click **Save**.
 3. **Answering Questions**:
    - **From Selection**: Highlight any text on the page or inside an iframe, open the window, and click **Use selection**. The highlighted text will populate the input field.

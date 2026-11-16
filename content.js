@@ -449,11 +449,11 @@
             class="ai-input"
             type="text"
             id="aiModelInput"
-            placeholder="gemini-3.8-flash"
+            placeholder="gemini-2.0-flash"
             autocomplete="off"
             spellcheck="false"
           />
-          <span class="ai-hint">Default: gemini-3.8-flash</span>
+          <span class="ai-hint">Default: gemini-2.0-flash (with auto-fallback on high demand)</span>
         </div>
 
         <div class="ai-settings-actions">
@@ -469,10 +469,17 @@
   shadow.appendChild(style);
   shadow.appendChild(container);
 
-  if (document.body) {
-    document.body.appendChild(host);
-  } else {
-    document.documentElement.appendChild(host);
+  function attachHost() {
+    if (document.getElementById("floating-ai-assistant-host")) return;
+    const target = document.body || document.documentElement;
+    if (target) {
+      target.appendChild(host);
+    }
+  }
+
+  attachHost();
+  if (!document.getElementById("floating-ai-assistant-host")) {
+    window.addEventListener("DOMContentLoaded", attachHost);
   }
 
   // DOM references
@@ -572,8 +579,8 @@
       }
       let savedModel = data && data.model ? data.model : "";
       if (savedModel === "gemini-2.5-flash") {
-        savedModel = "gemini-3.8-flash";
-        chrome.storage.local.set({ model: "gemini-3.8-flash" }).catch(() => {});
+        savedModel = "gemini-2.0-flash";
+        chrome.storage.local.set({ model: "gemini-2.0-flash" }).catch(() => {});
       }
       apiKeyInput.value = data && data.apiKey ? data.apiKey : "";
       modelInput.value = savedModel;
@@ -609,7 +616,7 @@
     const rawApiKey = apiKeyInput.value.trim();
     const rawModel = modelInput.value.trim();
     const modelToSave =
-      !rawModel || rawModel === "gemini-2.5-flash" ? "gemini-3.8-flash" : rawModel;
+      !rawModel || rawModel === "gemini-2.5-flash" ? "gemini-2.0-flash" : rawModel;
 
     chrome.storage.local.set(
       {

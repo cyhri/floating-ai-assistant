@@ -38,7 +38,37 @@ function relayIframeSelection(sender, text) {
   }
 }
 
-// Handle ask request to Gemini API
+// Helper to call Gemini generateContent endpoint
+async function callGemini(modelName, prompt, apiKey) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    modelName
+  )}:generateContent`;
+
+  const payload = {
+    systemInstruction: {
+      parts: [{ text: SYSTEM_INSTRUCTION }],
+    },
+    contents: [
+      {
+        parts: [{ text: prompt.trim() }],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.2,
+    },
+  };
+
+  return await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": apiKey,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+// Handle ask request to Gemini API with automatic high-demand/model fallback
 async function handleAsk(prompt) {
   if (!prompt || !prompt.trim()) {
     return {
@@ -66,53 +96,69 @@ async function handleAsk(prompt) {
     };
   }
 
-  let model =
+  const userModel =
     storage && storage.model && storage.model.trim()
       ? storage.model.trim()
-      : "gemini-3.8-flash";
+      : "gemini-2.0-flash";
 
-  // Automatically migrate deprecated model
-  if (model === "gemini-2.5-flash") {
-    model = "gemini-3.8-flash";
-    chrome.storage.local.set({ model: "gemini-3.8-flash" }).catch(() => {});
+  // Build model priority list: user model first, followed by reliable fallbacks
+  const modelsToTry = [userModel];
+  if (!modelsToTry.includes("gemini-2.0-flash")) {
+    modelsToTry.push("gemini-2.0-flash");
+  }
+  if (!modelsToTry.includes("gemini-1.5-flash")) {
+    modelsToTry.push("gemini-1.5-flash");
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    model
-  )}:generateContent`;
+  let lastError = null;
 
-  const payload = {
-    systemInstruction: {
-      parts: [{ text: SYSTEM_INSTRUCTION }],
-    },
-    contents: [
-      {
-        parts: [{ text: prompt.trim() }],
-      },
-    ],
-    generationConfig: {
-      temperature: 0.2,
-    },
-  };
+  for (let i = 0; i < modelsToTry.length; i++) {
+    const currentModel = modelsToTry[i];
+    let response;
 
-  let response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
-  } catch (netErr) {
-    return {
-      ok: false,
-      error: `Network error: Unable to reach Gemini API. Please check your connection. (${netErr.message})`,
-    };
-  }
+    try {
+      response = await callGemini(currentModel, prompt, apiKey);
+    } catch (netErr) {
+      return {
+        ok: false,
+        error: `Network error: Unable to reach Gemini API. Please check your connection. (${netErr.message})`,
+      };
+    }
 
-  if (!response.ok) {
+    if (response.ok) {
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseErr) {
+        return {
+          ok: false,
+          error: "Failed to parse API response as JSON.",
+        };
+      }
+
+      const candidate = data.candidates && data.candidates[0];
+      const replyText = candidate?.content?.parts?.[0]?.text;
+
+      if (!replyText || !replyText.trim()) {
+        const finishReason = candidate?.finishReason || "NO_CONTENT";
+        return {
+          ok: false,
+          error: `Empty response received from Gemini (Finish reason: ${finishReason}).`,
+        };
+      }
+
+      return {
+        ok: true,
+        text: replyText.trim(),
+      };
+    }
+
+    // If HTTP 503 (high demand / unavailable) or HTTP 404 (model deprecated / unavailable),
+    // automatically failover to the next candidate model
+    if ((response.status === 503 || response.status === 404) && i < modelsToTry.length - 1) {
+      continue;
+    }
+
     if (response.status === 429) {
       return {
         ok: false,
@@ -129,36 +175,12 @@ async function handleAsk(prompt) {
     }
 
     const preview = errorBody.slice(0, 300);
-    return {
-      ok: false,
-      error: `API error (HTTP ${response.status}): ${preview}`,
-    };
-  }
-
-  let data;
-  try {
-    data = await response.json();
-  } catch (parseErr) {
-    return {
-      ok: false,
-      error: "Failed to parse API response as JSON.",
-    };
-  }
-
-  const candidate = data.candidates && data.candidates[0];
-  const replyText = candidate?.content?.parts?.[0]?.text;
-
-  if (!replyText || !replyText.trim()) {
-    const finishReason = candidate?.finishReason || "NO_CONTENT";
-    return {
-      ok: false,
-      error: `Empty response received from Gemini (Finish reason: ${finishReason}).`,
-    };
+    lastError = `API error (HTTP ${response.status}) on ${currentModel}: ${preview}`;
   }
 
   return {
-    ok: true,
-    text: replyText.trim(),
+    ok: false,
+    error: lastError || "Failed to generate answer.",
   };
 }
 
