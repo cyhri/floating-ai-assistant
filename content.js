@@ -1,5 +1,5 @@
 // Content script for Floating AI Assistant
-// Runs on all pages, handles floating window injection, selection tracking, and iframe relay
+// Runs on all pages, handles floating window injection, selection tracking, settings, and iframe relay
 
 (function () {
   const isTopFrame = window.self === window.top;
@@ -162,6 +162,10 @@
       background: rgba(255, 255, 255, 0.2);
     }
 
+    .ai-icon-btn.active {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
     .ai-icon-btn svg {
       width: 16px;
       height: 16px;
@@ -180,6 +184,7 @@
       gap: 10px;
       overflow: hidden;
       background: #fdfdfd;
+      position: relative;
     }
 
     .ai-answer-area {
@@ -289,6 +294,87 @@
       cursor: not-allowed;
       transform: none;
     }
+
+    /* Settings Panel */
+    .ai-settings-panel {
+      position: absolute;
+      top: 44px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #ffffff;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .ai-settings-panel.hidden {
+      display: none !important;
+    }
+
+    .ai-settings-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #111827;
+      margin-bottom: 2px;
+    }
+
+    .ai-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .ai-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .ai-input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #111827;
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .ai-input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+
+    .ai-hint {
+      font-size: 11px;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+
+    .ai-settings-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .ai-settings-status {
+      font-size: 12px;
+      min-height: 16px;
+    }
+
+    .ai-settings-status.success {
+      color: #059669;
+    }
+
+    .ai-settings-status.error {
+      color: #dc2626;
+    }
   `;
 
   const container = document.createElement("div");
@@ -339,6 +425,44 @@
           </div>
         </div>
       </div>
+
+      <!-- Settings Panel -->
+      <div class="ai-settings-panel hidden" id="aiSettingsPanel">
+        <div class="ai-settings-title">Configuration</div>
+
+        <div class="ai-field">
+          <label class="ai-label" for="aiApiKeyInput">Gemini API Key</label>
+          <input
+            class="ai-input"
+            type="password"
+            id="aiApiKeyInput"
+            placeholder="Enter your Gemini API key"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <span class="ai-hint">Get a free key from Google AI Studio (aistudio.google.com).</span>
+        </div>
+
+        <div class="ai-field">
+          <label class="ai-label" for="aiModelInput">Model Name</label>
+          <input
+            class="ai-input"
+            type="text"
+            id="aiModelInput"
+            placeholder="gemini-2.5-flash"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <span class="ai-hint">Default: gemini-2.5-flash</span>
+        </div>
+
+        <div class="ai-settings-actions">
+          <button class="ai-btn ai-btn-primary" id="aiBtnSaveSettings" type="button">Save</button>
+          <button class="ai-btn ai-btn-secondary" id="aiBtnCancelSettings" type="button">Cancel</button>
+        </div>
+
+        <div class="ai-settings-status" id="aiSettingsStatus"></div>
+      </div>
     </div>
   `;
 
@@ -356,6 +480,13 @@
   const win = shadow.getElementById("aiWindow");
   const titlebar = shadow.getElementById("aiTitlebar");
   const closeBtn = shadow.getElementById("aiCloseBtn");
+  const settingsBtn = shadow.getElementById("aiSettingsBtn");
+  const settingsPanel = shadow.getElementById("aiSettingsPanel");
+  const apiKeyInput = shadow.getElementById("aiApiKeyInput");
+  const modelInput = shadow.getElementById("aiModelInput");
+  const btnSaveSettings = shadow.getElementById("aiBtnSaveSettings");
+  const btnCancelSettings = shadow.getElementById("aiBtnCancelSettings");
+  const settingsStatus = shadow.getElementById("aiSettingsStatus");
   const answerArea = shadow.getElementById("aiAnswerArea");
   const promptInput = shadow.getElementById("aiPromptInput");
   const btnUseSelection = shadow.getElementById("aiBtnUseSelection");
@@ -373,9 +504,13 @@
     }
   });
 
-  // Listen for relayed selection from iframes via background worker
+  // Listen for relayed selection and toggle command from background worker
   chrome.runtime.onMessage.addListener((message) => {
-    if (message && message.action === "updateSelection" && message.text) {
+    if (!message || typeof message !== "object") return;
+
+    if (message.action === "toggle") {
+      toggleWindow();
+    } else if (message.action === "updateSelection" && message.text) {
       lastSelection = message.text.trim();
     }
   });
@@ -387,6 +522,7 @@
 
   // Window position & visibility state
   let isOpen = false;
+  let isSettingsOpen = false;
 
   function openWindow() {
     isOpen = true;
@@ -408,6 +544,7 @@
     isOpen = false;
     win.classList.add("hidden");
     bubble.classList.remove("hidden");
+    closeSettings();
   }
 
   function toggleWindow() {
@@ -418,8 +555,94 @@
     }
   }
 
+  // Settings panel toggle and storage
+  function openSettings() {
+    isSettingsOpen = true;
+    settingsBtn.classList.add("active");
+    settingsPanel.classList.remove("hidden");
+    settingsStatus.textContent = "";
+    settingsStatus.className = "ai-settings-status";
+
+    // Load saved settings from chrome.storage.local
+    chrome.storage.local.get(["apiKey", "model"], (data) => {
+      if (chrome.runtime.lastError) {
+        settingsStatus.className = "ai-settings-status error";
+        settingsStatus.textContent = "Could not load settings.";
+        return;
+      }
+      apiKeyInput.value = data && data.apiKey ? data.apiKey : "";
+      modelInput.value = data && data.model ? data.model : "";
+      apiKeyInput.focus();
+    });
+  }
+
+  function closeSettings() {
+    isSettingsOpen = false;
+    settingsBtn.classList.remove("active");
+    settingsPanel.classList.add("hidden");
+    settingsStatus.textContent = "";
+  }
+
+  function toggleSettings() {
+    if (isSettingsOpen) {
+      closeSettings();
+    } else {
+      openSettings();
+    }
+  }
+
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleSettings();
+  });
+
+  btnCancelSettings.addEventListener("click", () => {
+    closeSettings();
+  });
+
+  btnSaveSettings.addEventListener("click", () => {
+    const rawApiKey = apiKeyInput.value.trim();
+    const rawModel = modelInput.value.trim();
+    const modelToSave = rawModel || "gemini-2.5-flash";
+
+    chrome.storage.local.set(
+      {
+        apiKey: rawApiKey,
+        model: modelToSave,
+      },
+      () => {
+        if (chrome.runtime.lastError) {
+          settingsStatus.className = "ai-settings-status error";
+          settingsStatus.textContent = `Save failed: ${chrome.runtime.lastError.message}`;
+          return;
+        }
+
+        settingsStatus.className = "ai-settings-status success";
+        settingsStatus.textContent = "Settings saved successfully!";
+
+        setTimeout(() => {
+          if (isSettingsOpen) {
+            closeSettings();
+          }
+        }, 800);
+      }
+    );
+  });
+
   bubble.addEventListener("click", openWindow);
   closeBtn.addEventListener("click", closeWindow);
+
+  // Keyboard shortcut listener: Alt+Shift+Q
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.altKey && e.shiftKey && (e.code === "KeyQ" || e.key === "Q" || e.key === "q")) {
+        e.preventDefault();
+        toggleWindow();
+      }
+    },
+    true
+  );
 
   // Dragging logic
   let isDragging = false;
@@ -453,6 +676,7 @@
     let newLeft = initialLeft + deltaX;
     let newTop = initialTop + deltaY;
 
+    // Constrain inside viewport
     const winWidth = win.offsetWidth;
     const winHeight = win.offsetHeight;
     const maxLeft = Math.max(0, window.innerWidth - winWidth);
