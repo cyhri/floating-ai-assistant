@@ -38,7 +38,7 @@ function relayIframeSelection(sender, text) {
   }
 }
 
-// Helper to call Gemini generateContent endpoint with low latency and thinking budget disabled
+// Helper to call Gemini generateContent endpoint
 async function callGemini(modelName, prompt, apiKey) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     modelName
@@ -55,9 +55,6 @@ async function callGemini(modelName, prompt, apiKey) {
     ],
     generationConfig: {
       temperature: 0.2,
-      thinkingConfig: {
-        thinkingBudget: 0,
-      },
     },
   };
 
@@ -112,8 +109,11 @@ async function handleAsk(prompt) {
       ? storage.model.trim()
       : "gemini-2.0-flash";
 
-  // Build model priority list: user model first, followed by reliable fallbacks
-  const modelsToTry = [userModel];
+  // Build model priority list: user model first (if not deprecated), followed by reliable fallbacks
+  const modelsToTry = [];
+  if (userModel && userModel !== "gemini-2.5-flash") {
+    modelsToTry.push(userModel);
+  }
   if (!modelsToTry.includes("gemini-2.0-flash")) {
     modelsToTry.push("gemini-2.0-flash");
   }
@@ -130,8 +130,8 @@ async function handleAsk(prompt) {
     try {
       response = await callGemini(currentModel, prompt, apiKey);
     } catch (netErr) {
-      if (netErr.name === "AbortError" && i < modelsToTry.length - 1) {
-        // Model took too long, failover immediately to the next fallback model
+      if (i < modelsToTry.length - 1) {
+        // Timeout or network glitch on this model, failover immediately to next model
         continue;
       }
       return {
@@ -171,9 +171,9 @@ async function handleAsk(prompt) {
       };
     }
 
-    // If HTTP 503 (high demand / unavailable) or HTTP 404 (model deprecated / unavailable),
-    // automatically failover to the next candidate model
-    if ((response.status === 503 || response.status === 404) && i < modelsToTry.length - 1) {
+    // If this model returned ANY error (503 high demand, 404, 429 rate limit, etc.)
+    // and we have alternative models left, failover immediately!
+    if (!response.ok && i < modelsToTry.length - 1) {
       continue;
     }
 
