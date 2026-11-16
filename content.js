@@ -1,20 +1,33 @@
 // Content script for Floating AI Assistant
-// Runs on all pages, handles floating window injection and interactions
+// Runs on all pages, handles floating window injection, selection tracking, and iframe relay
 
 (function () {
   const isTopFrame = window.self === window.top;
 
-  // Non-top frames: only handle selection forwarding (detailed in next step)
+  // --- IFRAME SUPPORT ---
+  // In child frames, only monitor selections and relay to the background worker/top frame
   if (!isTopFrame) {
+    document.addEventListener("selectionchange", () => {
+      try {
+        const sel = window.getSelection() ? window.getSelection().toString().trim() : "";
+        if (sel) {
+          chrome.runtime.sendMessage({ action: "iframeSelection", text: sel }).catch(() => {
+            // Safe ignore if background worker or top frame is not listening
+          });
+        }
+      } catch (err) {
+        // Prevent cross-origin iframe security exceptions from bubbling
+      }
+    });
     return;
   }
 
-  // Prevent multiple injections in top frame
+  // Prevent multiple injections in the top frame
   if (document.getElementById("floating-ai-assistant-host")) {
     return;
   }
 
-  // Create host container with max z-index
+  // --- HOST ELEMENT & SHADOW DOM ---
   const host = document.createElement("div");
   host.id = "floating-ai-assistant-host";
   host.style.all = "initial";
@@ -196,7 +209,7 @@
     }
 
     .ai-answer-area.status {
-      color: #4b5563;
+      color: #6b7280;
     }
 
     .ai-input-area {
@@ -264,7 +277,7 @@
       background: #4f46e5;
       color: #ffffff;
       margin-left: auto;
-      min-width: 64px;
+      min-width: 68px;
     }
 
     .ai-btn-primary:hover {
@@ -278,7 +291,6 @@
     }
   `;
 
-  // HTML templates for bubble and window
   const container = document.createElement("div");
   container.innerHTML = `
     <!-- Bubble button -->
@@ -339,11 +351,39 @@
     document.documentElement.appendChild(host);
   }
 
-  // Elements
+  // DOM references
   const bubble = shadow.getElementById("aiBubble");
   const win = shadow.getElementById("aiWindow");
   const titlebar = shadow.getElementById("aiTitlebar");
   const closeBtn = shadow.getElementById("aiCloseBtn");
+  const answerArea = shadow.getElementById("aiAnswerArea");
+  const promptInput = shadow.getElementById("aiPromptInput");
+  const btnUseSelection = shadow.getElementById("aiBtnUseSelection");
+  const btnReadPage = shadow.getElementById("aiBtnReadPage");
+  const btnAsk = shadow.getElementById("aiBtnAsk");
+
+  // Selection tracking state
+  let lastSelection = "";
+
+  // Track selection changes in the top frame
+  document.addEventListener("selectionchange", () => {
+    const sel = window.getSelection() ? window.getSelection().toString().trim() : "";
+    if (sel) {
+      lastSelection = sel;
+    }
+  });
+
+  // Listen for relayed selection from iframes via background worker
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message && message.action === "updateSelection" && message.text) {
+      lastSelection = message.text.trim();
+    }
+  });
+
+  // Preserving page selection on button click
+  btnUseSelection.addEventListener("mousedown", (e) => e.preventDefault());
+  btnReadPage.addEventListener("mousedown", (e) => e.preventDefault());
+  btnAsk.addEventListener("mousedown", (e) => e.preventDefault());
 
   // Window position & visibility state
   let isOpen = false;
@@ -353,7 +393,6 @@
     bubble.classList.add("hidden");
     win.classList.remove("hidden");
 
-    // Position window if not already positioned
     if (!win.style.top && !win.style.left) {
       const defaultWidth = 360;
       const defaultHeight = 420;
@@ -390,7 +429,6 @@
   let initialTop = 0;
 
   titlebar.addEventListener("mousedown", (e) => {
-    // Ignore clicks on titlebar action buttons
     if (e.target.closest(".ai-icon-btn")) {
       return;
     }
@@ -415,7 +453,6 @@
     let newLeft = initialLeft + deltaX;
     let newTop = initialTop + deltaY;
 
-    // Constrain inside viewport
     const winWidth = win.offsetWidth;
     const winHeight = win.offsetHeight;
     const maxLeft = Math.max(0, window.innerWidth - winWidth);
@@ -434,6 +471,86 @@
     }
   });
 
-  // Export toggle to global scope for subsequent script features
+  // Display helpers for status and errors
+  function showStatus(text) {
+    answerArea.className = "ai-answer-area status";
+    answerArea.textContent = text;
+  }
+
+  function showError(text) {
+    answerArea.className = "ai-answer-area error";
+    answerArea.textContent = text;
+  }
+
+  function showAnswer(text) {
+    answerArea.className = "ai-answer-area";
+    answerArea.textContent = text;
+  }
+
+  // "Use selection" button
+  btnUseSelection.addEventListener("click", () => {
+    const activeSel = window.getSelection() ? window.getSelection().toString().trim() : "";
+    const textToUse = activeSel || lastSelection;
+    if (textToUse) {
+      promptInput.value = textToUse;
+      promptInput.focus();
+    } else {
+      showStatus("No text currently selected on this page or iframe.");
+    }
+  });
+
+  // "Read page" button
+  btnReadPage.addEventListener("click", () => {
+    const pageText = (document.body ? document.body.innerText : "").trim();
+    if (pageText) {
+      promptInput.value = pageText.slice(0, 12000);
+      promptInput.focus();
+    } else {
+      showStatus("Page body is empty.");
+    }
+  });
+
+  // "Ask" button
+  btnAsk.addEventListener("click", () => {
+    const inputVal = promptInput.value.trim();
+    const promptToSend = inputVal || lastSelection;
+
+    if (!promptToSend) {
+      showError("Please enter a question or select text on the page.");
+      return;
+    }
+
+    if (!inputVal && promptToSend) {
+      promptInput.value = promptToSend;
+    }
+
+    btnAsk.disabled = true;
+    btnAsk.textContent = "Thinking...";
+    showStatus("Thinking...");
+
+    chrome.runtime.sendMessage({ action: "ask", prompt: promptToSend }, (response) => {
+      btnAsk.disabled = false;
+      btnAsk.textContent = "Ask";
+
+      if (chrome.runtime.lastError) {
+        showError(
+          `Communication error: ${chrome.runtime.lastError.message || "Failed to reach background service."}`
+        );
+        return;
+      }
+
+      if (!response || typeof response !== "object") {
+        showError("Received an invalid response from the background service.");
+        return;
+      }
+
+      if (!response.ok) {
+        showError(response.error || "An unknown error occurred.");
+      } else {
+        showAnswer(response.text || "No answer generated.");
+      }
+    });
+  });
+
   window.__floatingAiToggle = toggleWindow;
 })();
