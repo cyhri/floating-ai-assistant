@@ -449,11 +449,11 @@
             class="ai-input"
             type="text"
             id="aiModelInput"
-            placeholder="gemini-2.5-flash"
+            placeholder="gemini-3.8-flash"
             autocomplete="off"
             spellcheck="false"
           />
-          <span class="ai-hint">Default: gemini-2.5-flash</span>
+          <span class="ai-hint">Default: gemini-3.8-flash</span>
         </div>
 
         <div class="ai-settings-actions">
@@ -570,8 +570,13 @@
         settingsStatus.textContent = "Could not load settings.";
         return;
       }
+      let savedModel = data && data.model ? data.model : "";
+      if (savedModel === "gemini-2.5-flash") {
+        savedModel = "gemini-3.8-flash";
+        chrome.storage.local.set({ model: "gemini-3.8-flash" }).catch(() => {});
+      }
       apiKeyInput.value = data && data.apiKey ? data.apiKey : "";
-      modelInput.value = data && data.model ? data.model : "";
+      modelInput.value = savedModel;
       apiKeyInput.focus();
     });
   }
@@ -603,7 +608,8 @@
   btnSaveSettings.addEventListener("click", () => {
     const rawApiKey = apiKeyInput.value.trim();
     const rawModel = modelInput.value.trim();
-    const modelToSave = rawModel || "gemini-2.5-flash";
+    const modelToSave =
+      !rawModel || rawModel === "gemini-2.5-flash" ? "gemini-3.8-flash" : rawModel;
 
     chrome.storage.local.set(
       {

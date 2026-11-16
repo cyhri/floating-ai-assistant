@@ -66,10 +66,16 @@ async function handleAsk(prompt) {
     };
   }
 
-  const model =
+  let model =
     storage && storage.model && storage.model.trim()
       ? storage.model.trim()
-      : "gemini-2.5-flash";
+      : "gemini-3.8-flash";
+
+  // Automatically migrate deprecated model
+  if (model === "gemini-2.5-flash") {
+    model = "gemini-3.8-flash";
+    chrome.storage.local.set({ model: "gemini-3.8-flash" }).catch(() => {});
+  }
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
