@@ -747,7 +747,9 @@
     }
   });
 
-  // "Ask" button
+  // "Ask" button with safety timeout to prevent getting stuck
+  let askSafetyTimeout = null;
+
   btnAsk.addEventListener("click", () => {
     const inputVal = promptInput.value.trim();
     const promptToSend = inputVal || lastSelection;
@@ -765,7 +767,24 @@
     btnAsk.textContent = "Thinking...";
     showStatus("Thinking...");
 
+    let hasResolved = false;
+
+    // Safety timeout: reset after 14s if background service hangs
+    if (askSafetyTimeout) clearTimeout(askSafetyTimeout);
+    askSafetyTimeout = setTimeout(() => {
+      if (!hasResolved) {
+        hasResolved = true;
+        btnAsk.disabled = false;
+        btnAsk.textContent = "Ask";
+        showError("Response took too long. Please verify your connection or model settings and try again.");
+      }
+    }, 14000);
+
     chrome.runtime.sendMessage({ action: "ask", prompt: promptToSend }, (response) => {
+      if (hasResolved) return;
+      hasResolved = true;
+      if (askSafetyTimeout) clearTimeout(askSafetyTimeout);
+
       btnAsk.disabled = false;
       btnAsk.textContent = "Ask";
 

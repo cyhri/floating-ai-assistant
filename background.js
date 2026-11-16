@@ -38,7 +38,7 @@ function relayIframeSelection(sender, text) {
   }
 }
 
-// Helper to call Gemini generateContent endpoint
+// Helper to call Gemini generateContent endpoint with low latency and thinking budget disabled
 async function callGemini(modelName, prompt, apiKey) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     modelName
@@ -55,17 +55,28 @@ async function callGemini(modelName, prompt, apiKey) {
     ],
     generationConfig: {
       temperature: 0.2,
+      thinkingConfig: {
+        thinkingBudget: 0,
+      },
     },
   };
 
-  return await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": apiKey,
-    },
-    body: JSON.stringify(payload),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    return await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // Handle ask request to Gemini API with automatic high-demand/model fallback
@@ -119,6 +130,10 @@ async function handleAsk(prompt) {
     try {
       response = await callGemini(currentModel, prompt, apiKey);
     } catch (netErr) {
+      if (netErr.name === "AbortError" && i < modelsToTry.length - 1) {
+        // Model took too long, failover immediately to the next fallback model
+        continue;
+      }
       return {
         ok: false,
         error: `Network error: Unable to reach Gemini API. Please check your connection. (${netErr.message})`,
@@ -137,7 +152,10 @@ async function handleAsk(prompt) {
       }
 
       const candidate = data.candidates && data.candidates[0];
-      const replyText = candidate?.content?.parts?.[0]?.text;
+      const parts = candidate?.content?.parts || [];
+      // Prefer non-thought answer part
+      const answerPart = parts.find((p) => !p.thought && p.text) || parts[0];
+      const replyText = answerPart?.text;
 
       if (!replyText || !replyText.trim()) {
         const finishReason = candidate?.finishReason || "NO_CONTENT";
