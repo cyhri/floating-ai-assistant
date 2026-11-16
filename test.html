@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floating AI Assistant - Test Page</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 40px 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 800px;
+      width: 100%;
+    }
+
+    header {
+      margin-bottom: 32px;
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 28px;
+      color: #0f172a;
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+
+    .notice {
+      background-color: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 28px;
+      font-size: 14px;
+      color: #1e40af;
+    }
+
+    .notice strong {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .notice ol {
+      margin-left: 20px;
+      margin-top: 6px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      margin-bottom: 16px;
+      color: #334155;
+    }
+
+    .quiz-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
+
+    .question-header {
+      font-weight: 600;
+      font-size: 17px;
+      margin-bottom: 14px;
+      color: #0f172a;
+    }
+
+    .options-list {
+      list-style-type: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .option-item {
+      padding: 10px 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: text;
+    }
+
+    .option-item strong {
+      color: var(--primary);
+      margin-right: 6px;
+    }
+
+    .iframe-container {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
+
+    iframe {
+      width: 100%;
+      height: 220px;
+      border: 1px dashed #cbd5e1;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Floating AI Assistant - Test Environment</h1>
+      <p class="subtitle">Use this page to verify floating window interactions, selection capture, and Gemini API answers.</p>
+    </header>
+
+    <div class="notice">
+      <strong>Important Local Testing Instructions:</strong>
+      <ol>
+        <li>If viewing via <code>file://</code>, make sure you toggled <strong>"Allow access to file URLs"</strong> ON for "Floating AI Assistant" in <code>chrome://extensions</code>.</li>
+        <li>Open the assistant using the <strong>bottom-right floating bubble</strong> or the <strong>Alt+Shift+Q</strong> shortcut.</li>
+        <li>Open Settings (gear icon in the window title bar) to save your Gemini API key.</li>
+        <li>Highlight any question below, click <strong>"Use selection"</strong>, and click <strong>"Ask"</strong>.</li>
+      </ol>
+    </div>
+
+    <h2 class="section-title">Sample Multiple-Choice Questions</h2>
+
+    <!-- Question 1: Computer Science / Algorithms -->
+    <div class="quiz-card">
+      <div class="question-header">Question 1: What is the worst-case time complexity of lookup in a balanced Binary Search Tree (AVL or Red-Black tree)?</div>
+      <ul class="options-list">
+        <li class="option-item"><strong>A.</strong> O(1)</li>
+        <li class="option-item"><strong>B.</strong> O(log n)</li>
+        <li class="option-item"><strong>C.</strong> O(n)</li>
+        <li class="option-item"><strong>D.</strong> O(n log n)</li>
+      </ul>
+    </div>
+
+    <!-- Question 2: General Science / Biology -->
+    <div class="quiz-card">
+      <div class="question-header">Question 2: Which organelle is primarily responsible for synthesizing adenosine triphosphate (ATP) via cellular respiration?</div>
+      <ul class="options-list">
+        <li class="option-item"><strong>A.</strong> Ribosome</li>
+        <li class="option-item"><strong>B.</strong> Golgi apparatus</li>
+        <li class="option-item"><strong>C.</strong> Mitochondrion</li>
+        <li class="option-item"><strong>D.</strong> Endoplasmic reticulum</li>
+      </ul>
+    </div>
+
+    <!-- Question 3: Physics / Networking -->
+    <div class="quiz-card">
+      <div class="question-header">Question 3: In the OSI networking model, which layer is responsible for end-to-end communication control, flow control, and error recovery (e.g., TCP)?</div>
+      <ul class="options-list">
+        <li class="option-item"><strong>A.</strong> Physical Layer</li>
+        <li class="option-item"><strong>B.</strong> Network Layer</li>
+        <li class="option-item"><strong>C.</strong> Transport Layer</li>
+        <li class="option-item"><strong>D.</strong> Application Layer</li>
+      </ul>
+    </div>
+
+    <h2 class="section-title">Embedded Iframe Test (Iframe Selection Relay)</h2>
+    <div class="iframe-container">
+      <p style="font-size: 14px; color: #475569;">The box below is an embedded iframe. Highlight text inside this iframe and test clicking "Use selection" in the floating window:</p>
+      <iframe srcdoc="<!DOCTYPE html><html><body style='font-family:sans-serif;padding:16px;background:#fafafa;color:#334155;'><strong>Iframe Embedded Question:</strong><p style='margin-top:8px;'>Which HTTP status code signifies that the server successfully processed the request, but is not returning any content?</p><ul style='margin-top:8px;line-height:1.6;'><li>A) 200 OK</li><li>B) 204 No Content</li><li>C) 304 Not Modified</li><li>D) 404 Not Found</li></ul></body></html>"></iframe>
+    </div>
+  </div>
+</body>
+</html>
